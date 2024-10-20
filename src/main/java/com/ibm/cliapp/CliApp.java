@@ -7,20 +7,29 @@ import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
 public abstract class CliApp<A extends CliApp<?>> {
 	
-	public static final String DEFAULT_MISSING_ACTION_PARAM_MSG = "No action name provided";
-	public static final String DEFAULT_UNKNOWN_ACTION_PARAM_MSG = "No action with '%s'";
-	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = "Error executing action '%s': %s";
+	private static final String LINE_SEPARATOR = System.getProperty("line.separator");
+	
+	public static final int ERR_OK = 0;
+	public static final int ERR_INVALID_OPTION = ERR_OK + 1;
+	public static final int ERR_MISSING_ACTION = ERR_INVALID_OPTION + 1;
+	public static final int ERR_UNKNOWN_ACTION = ERR_MISSING_ACTION + 1;
+	public static final int ERR_ACTION_EXCEPTION = ERR_UNKNOWN_ACTION + 1;
+	
+	public static final String DEFAULT_MISSING_ACTION_PARAM_MSG = String.format("No action name provided.%s", LINE_SEPARATOR);
+	public static final String DEFAULT_UNKNOWN_ACTION_PARAM_MSG = String.format("No action named '%%s'.%s", LINE_SEPARATOR);
+	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = String.format("Error executing action '%%s': %%s.%s", LINE_SEPARATOR);
+	
 	
 	private InputStream in;
 	private PrintStream out;
 	private PrintStream err;
-	private Map<String, CliAction<A>> actions;
+	private RuntimeException lastThrownException;
+	private Map<String, CliAction<A>> actions = new HashMap<String, CliAction<A>>();
 	private final Options options = new Options();
 	
 	
@@ -44,69 +53,87 @@ public abstract class CliApp<A extends CliApp<?>> {
 		
 		int retCode = 0;
 		
-		if (args == null || args.length < 1)
-			throw new IllegalArgumentException(generateMissingActionErrorMessage());
+		if (args == null || args.length < 1) {
+			retCode = handleActionError(null);
 		
-		CliAction<A> action = actions.get(args[0]);
-		if (action == null)
-			throw new IllegalArgumentException(generateUnknownActionErrorMessage(args[0]));
-		
-		try {
-			retCode = action.execute((A) this, args);
-		
-		} catch (RuntimeException rex) {
-			String message = generateActionExecutionErrorMessage(args[0], rex); 
-			if (message != null)
-				err.println(message);
+		} else {
+			CliAction<A> action = actions.get(args[0]);
+			if (action == null) {
+				retCode = handleActionError(args[0]);
 			
-			retCode = 255;
+			} else {
+				try {
+					retCode = action.execute((A) this, args);
+				
+				} catch (RuntimeException rex) {
+					this.lastThrownException = rex;
+					retCode = handleActionExecutionException(args[0], rex);
+				}
+			}
 		}
 		
 		return retCode;
 	}
 	
-	protected String generateActionExecutionErrorMessage(String actionName, Exception ex) {
-		return String.format(DEFAULT_ACTION_EXECUTION_ERR_MSG, actionName, ex.getMessage());
-	}
-	
-	protected String generateMissingActionErrorMessage() {
-		return DEFAULT_MISSING_ACTION_PARAM_MSG;
-	}
-
-	protected String generateUnknownActionErrorMessage(String actionName) {
-		return String.format(DEFAULT_UNKNOWN_ACTION_PARAM_MSG, actionName);
+	protected final PrintStream getErrorStream() {
+		return this.err;
 	}
 	
 	protected final InputStream getInputStream() {
 		return this.in;
 	}
 	
+	public RuntimeException getLastActionException() {
+		return lastThrownException;
+	}
+	
+	protected final Options getOptions() {
+		return this.options;
+	}
+	
 	protected final PrintStream getOutputStream() {
 		return this.out;
 	}
-
-	protected final PrintStream getErrorStream() {
-		return this.err;
-	}
 	
-	protected int handleParseException(ParseException pex) {
+	protected int handleActionError(String actionName) {
 		
-		err.println(pex.getMessage());
-		return 1;
+		if (actionName == null)
+			this.getErrorStream().print(DEFAULT_MISSING_ACTION_PARAM_MSG);
+		else
+			this.getErrorStream().print(String.format(DEFAULT_UNKNOWN_ACTION_PARAM_MSG, actionName));
+				
+		return actionName == null ? ERR_MISSING_ACTION : ERR_UNKNOWN_ACTION;
 	}
 	
-	public final void run(String[] args) {
+	protected int handleActionExecutionException(String actionName, RuntimeException rex) {
+		
+		err.print(String.format(DEFAULT_ACTION_EXECUTION_ERR_MSG, actionName, rex.getMessage()));
+		return ERR_ACTION_EXCEPTION;
+	}
+
+	protected int handleOptionParseException(ParseException pex) {
+		
+		err.print(pex.getMessage());
+		return ERR_INVALID_OPTION;
+	}
+	
+	protected void initialize(CommandLine cmdLine) {
+		// do nothing
+	}
+	
+	public final int run(String[] args) {
 		
 		int retCode;
 		
 		try {
 			CommandLine cmdLine = new DefaultParser().parse(options, args);
+			this.initialize(cmdLine);
 			retCode = this.execute(cmdLine);
 
 		} catch (ParseException pex) {
-			retCode = handleParseException(pex);
+			retCode = handleOptionParseException(pex);
 		}
 		
-		System.exit(retCode);
+		return retCode;
 	}
 }
