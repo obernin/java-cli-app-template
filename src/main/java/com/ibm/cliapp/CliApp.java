@@ -2,34 +2,39 @@ package com.ibm.cliapp;
 
 import java.io.InputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 
-public abstract class CliApp<A extends CliApp<?>> {
+public abstract class CliApp<ThisApp extends CliApp<?>> {
 	
 	private static final String LINE_SEPARATOR = System.getProperty("line.separator");
 	
 	public static final int ERR_OK = 0;
 	public static final int ERR_INVALID_OPTION = ERR_OK + 1;
 	public static final int ERR_MISSING_ACTION = ERR_INVALID_OPTION + 1;
+	public static final String DEFAULT_MISSING_ACTION_PARAM_MSG = String.format("No command name provided.%s", LINE_SEPARATOR);
 	public static final int ERR_UNKNOWN_ACTION = ERR_MISSING_ACTION + 1;
+	public static final String DEFAULT_UNKNOWN_ACTION_PARAM_MSG = String.format("Unknown command '%%s'.%s", LINE_SEPARATOR);
 	public static final int ERR_ACTION_EXCEPTION = ERR_UNKNOWN_ACTION + 1;
-	
-	public static final String DEFAULT_MISSING_ACTION_PARAM_MSG = String.format("No action name provided.%s", LINE_SEPARATOR);
-	public static final String DEFAULT_UNKNOWN_ACTION_PARAM_MSG = String.format("No action named '%%s'.%s", LINE_SEPARATOR);
-	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = String.format("Error executing action '%%s': %%s.%s", LINE_SEPARATOR);
+	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = String.format("Error executing command '%%s': %%s.%s", LINE_SEPARATOR);
 	
 	
+	private CommandLine cmdLine = null;
 	private InputStream in;
 	private PrintStream out;
 	private PrintStream err;
 	private RuntimeException lastThrownException;
-	private Map<String, CliAction<A>> actions = new HashMap<String, CliAction<A>>();
+	private Map<String, CliCommand<ThisApp>> commands = new HashMap<String, CliCommand<ThisApp>>();
 	private final Options options = new Options();
 	
 	
@@ -40,15 +45,19 @@ public abstract class CliApp<A extends CliApp<?>> {
 		this.err = err == null ? System.err : err;
 	}
 
-	protected final void addAction(String name, CliAction<A> action) {
-		actions.put(name, action);
+	protected final void addCommand(String name, CliCommand<ThisApp> command) {
+		commands.put(name, command);
+	}
+	
+	protected final void addOption(Option option) {
+		options.addOption(option);
 	}
 	
 	protected int execute(CommandLine cmdLine) {
 		return executeAction(cmdLine.getArgs());
 	}
 	
-	@SuppressWarnings("unchecked") // It's okay to make the cast `(A) this` as A extends from CliApp
+	@SuppressWarnings("unchecked") // It's okay to make the cast `(ThisApp) this` as ThisApp extends from CliApp
 	protected final int executeAction(String[] args) {
 		
 		int retCode = 0;
@@ -57,13 +66,13 @@ public abstract class CliApp<A extends CliApp<?>> {
 			retCode = handleActionError(null);
 		
 		} else {
-			CliAction<A> action = actions.get(args[0]);
-			if (action == null) {
+			CliCommand<ThisApp> command = commands.get(args[0]);
+			if (command == null) {
 				retCode = handleActionError(args[0]);
 			
 			} else {
 				try {
-					retCode = action.execute((A) this, args);
+					retCode = command.execute((ThisApp) this, args);
 				
 				} catch (RuntimeException rex) {
 					this.lastThrownException = rex;
@@ -73,6 +82,10 @@ public abstract class CliApp<A extends CliApp<?>> {
 		}
 		
 		return retCode;
+	}
+	
+	private String generateCommandHelp() {
+		return null;
 	}
 	
 	protected final PrintStream getErrorStream() {
@@ -87,8 +100,18 @@ public abstract class CliApp<A extends CliApp<?>> {
 		return lastThrownException;
 	}
 	
-	protected final Options getOptions() {
-		return this.options;
+	protected final Option getOption(String optionName) {
+		
+		for (Option option : cmdLine.getOptions()) {
+			if (optionName.equals(option.getOpt()) || optionName.equals(option.getLongOpt()))
+				return option;
+		}
+		
+		return null;
+	}
+	
+	protected final Option[] getOptions() {
+		return this.cmdLine.getOptions();
 	}
 	
 	protected final PrintStream getOutputStream() {
@@ -121,12 +144,31 @@ public abstract class CliApp<A extends CliApp<?>> {
 		// do nothing
 	}
 	
+	protected final boolean isOptionSet(String optionName) {
+		return getOption(optionName) != null;
+	}
+	
+	protected void printUsage(PrintStream stream, String cmdName) {
+		
+		PrintWriter pw = new PrintWriter(stream);
+		
+		Set<String> actionNames = new TreeSet<String>(commands.keySet());
+		
+		pw.write("Actions are:");
+		for (String actionName : actionNames) {
+			stream.print(String.format("%s\t\n", actionName));
+		}
+		
+		HelpFormatter formatter = new HelpFormatter();
+		formatter.printHelp(cmdName, "\nOptions are:", options, "footer", true);
+	}
+	
 	public final int run(String[] args) {
 		
 		int retCode;
 		
 		try {
-			CommandLine cmdLine = new DefaultParser().parse(options, args);
+			cmdLine = new DefaultParser().parse(options, args);
 			this.initialize(cmdLine);
 			retCode = this.execute(cmdLine);
 
