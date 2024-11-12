@@ -26,7 +26,7 @@ public abstract class CliApp<ThisApp extends CliApp<?>> {
 	public static final int ERR_UNKNOWN_ACTION = ERR_MISSING_ACTION + 1;
 	public static final String DEFAULT_UNKNOWN_ACTION_PARAM_MSG = String.format("Unknown command '%%s'.%s", LINE_SEPARATOR);
 	public static final int ERR_ACTION_EXCEPTION = ERR_UNKNOWN_ACTION + 1;
-	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = String.format("Error executing command '%%s': %%s.%s", LINE_SEPARATOR);
+	public static final String DEFAULT_ACTION_EXECUTION_ERR_MSG = String.format("Error executing command '%%s': %%s%s", LINE_SEPARATOR);
 	
 	
 	private CommandLine cmdLine = null;
@@ -37,6 +37,25 @@ public abstract class CliApp<ThisApp extends CliApp<?>> {
 	private Map<String, CliCommand<ThisApp>> commands = new HashMap<String, CliCommand<ThisApp>>();
 	private final Options options = new Options();
 	
+	
+	/**
+	 * Shorten a long option name composed of hyphen (-) separated parts to a 
+	 * string made up of the first letter of each part.
+	 * E.g. some-long-option-name -> slon
+	 * 
+	 * @param longOptionName
+	 * @return
+	 */
+	public static String shortenOptionName(String longOptionName) {
+		
+		StringBuilder sb = new StringBuilder();
+		
+		String[] components = longOptionName.split("-+");
+		for (String component : components) {
+			sb.append(component.charAt(0));
+		}
+		return sb.toString();
+	}
 	
 	public CliApp(InputStream in, PrintStream out, PrintStream err) {
 		

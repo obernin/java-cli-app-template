@@ -9,5 +9,5 @@ package com.ibm.cliapp;
  */
 public interface CliCommand<App extends CliApp<?>> {
 
-	public int execute(App parentCliApp, String[] parameters) throws IllegalArgumentException;
+	public int execute(App cliApp, String[] parameters) throws IllegalArgumentException;
 }

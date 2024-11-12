@@ -330,5 +330,14 @@ public class CliAppTest {
 		assertEquals("exception message from TestLib.throwing", cliApp2.getLastActionException().getMessage());
 		assertEquals("", err.toString(DEF_CHARSET_NAME));
 	}
+	
+	@Test
+	public void testShortenOptionName() {
 
+		assertEquals("l", CliApp.shortenOptionName("longoption"));
+		assertEquals("lo", CliApp.shortenOptionName("long-option"));
+		assertEquals("avlo", CliApp.shortenOptionName("a-very-long-option"));
+		assertEquals("avlo", CliApp.shortenOptionName("a--very--long--option"));
+		
+	}
 }
