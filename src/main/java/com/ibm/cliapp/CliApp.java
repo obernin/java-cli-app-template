@@ -169,11 +169,9 @@ public abstract class CliApp<ThisApp extends CliApp<?>> {
 	
 	protected void printUsage(PrintStream stream, String cmdName) {
 		
-		PrintWriter pw = new PrintWriter(stream);
-		
 		Set<String> actionNames = new TreeSet<String>(commands.keySet());
 		
-		pw.write("Actions are:");
+		stream.print("Actions are:");
 		for (String actionName : actionNames) {
 			stream.print(String.format("%s\t\n", actionName));
 		}
